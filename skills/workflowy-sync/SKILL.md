@@ -58,6 +58,12 @@ If the user agrees, add the following to `.claude/settings.json` (create the fil
 ```
 Merge these entries into existing settings — do not overwrite other hooks or settings.
 
+**After installing hooks, tell the user they need to restart Claude Code for the hooks to take effect.** Display a message like:
+
+> Hooks have been installed. Please restart Claude Code for the permission notifications to take effect. After restarting, re-invoke `/workflowy-sync <node-id>` to continue.
+
+Then stop and wait for the user to restart — do not proceed with task processing until the next invocation.
+
 If the user declines, skip this and proceed normally. The skill works without hooks; the user just won't see permission notifications in Workflowy.
 
 ## Core Workflow
@@ -211,6 +217,12 @@ Questions are structured with options as children:
 └── OAuth (if we need third-party login)
 ```
 
+The user can respond in several ways:
+- **Select an option** by adding a child under it (e.g., "this one", "yes")
+- **Narrow the options** by deleting or marking as complete the options they don't want
+- **Expand an answer** by adding children under an option with more detail or context
+- **Provide a custom answer** by adding a new sibling to the options
+
 The user responds by adding a child under their chosen option:
 ```
 <b>#question:</b> Which authentication method should we use?
@@ -235,9 +247,11 @@ When you refetch the tree, look for answers in your question nodes:
 
 1. **Option selected**: One of your option nodes now has a child (e.g., "this one", "yes", "👍")
    - The parent of that child is the chosen option
-2. **Custom answer**: A new child of the question node that wasn't one of your original options
+2. **Options removed**: Some of your original options were deleted or marked complete — the remaining options are what the user wants
+3. **Option expanded**: An option node now has children with additional detail or context from the user
+4. **Custom answer**: A new child of the question node that wasn't one of your original options
    - This is the user providing an alternative
-3. **Inline edit**: The question or an option node was edited by the user
+5. **Inline edit**: The question or an option node was edited by the user
 
 **After processing an answer**, mark the question node as complete:
 ```
@@ -285,6 +299,10 @@ In this example:
 - "Choose database" has an unanswered question with options, plus a custom answer from the user
 - "Update README" is pending
 
+## Communicating Plans
+
+When reporting a plan or progress back to the user, **use Workflowy's note and nested list structure**. Create hierarchical breakdowns with parent nodes for phases/categories and child nodes for specific steps. This leverages Workflowy's strengths and makes plans easy for the user to reorganize, annotate, and respond to.
+
 ## Important Notes
 
 - Always work depth-first (complete subtasks before parent tasks)
@@ -292,3 +310,5 @@ In this example:
 - Keep status updates concise but informative
 - The user may add tasks at any level - always refetch to see the full picture
 - If the Workflowy MCP tools fail, inform the user and retry after a delay
+
+<!-- TODO: Rename this skill from "workflowy-sync" to "workflowy-driver" -->
