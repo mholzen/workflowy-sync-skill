@@ -94,6 +94,74 @@ Work through ready tasks recursively, depth-first:
 2. Non-todo children provide context about what the task means
 3. Look for any `#question:` nodes that now have sibling responses (user answers)
 
+### 4a. Parallel Task Execution
+
+Some parent tasks indicate that their children should be executed in parallel. Detect this by examining the parent node's text for natural language cues indicating parallel execution:
+- "in parallel"
+- "simultaneously"
+- "at once"
+- "concurrently"
+- "all together"
+- "at the same time"
+- Or similar phrasing that implies parallel work
+
+This detection should be flexible — users write naturally, not with rigid syntax.
+
+**When parallel execution is detected:**
+
+1. Gather all immediate child tasks (nodes with `layout_mode: "todo"` that aren't completed)
+
+2. Save the root node and parent task ID for permission hooks:
+```bash
+~/.claude/skills/workflowy-driver/scripts/workflowy-set-task.sh <parent-task-id> <root-id>
+```
+
+3. Create a status node on the parent with plural language:
+```
+Use mcp__workflowy__workflowy_create to add a child node:
+- parent_id: <parent-task-id>
+- name: "<b>started working on these in parallel</b>"
+- position: "bottom"
+```
+
+4. Launch ALL child tasks as subagents in a **SINGLE message**:
+   - Use the Task tool with `run_in_background: true` for each child task
+   - Each Task prompt should include the child's full context (name + any nested details)
+   - **CRITICAL**: All Task tool calls MUST be in ONE message for true parallelism
+   - Example with 3 parallel children:
+   ```
+   [In a single response, make three Task tool calls:]
+   - Task 1: run_in_background=true, prompt="Work on: <child-1-name>. Context: <child-1-details>"
+   - Task 2: run_in_background=true, prompt="Work on: <child-2-name>. Context: <child-2-details>"
+   - Task 3: run_in_background=true, prompt="Work on: <child-3-name>. Context: <child-3-details>"
+   ```
+
+5. Monitor progress by reading each agent's output file (returned from each Task call)
+
+6. As each child completes:
+   - Mark it complete in Workflowy using `mcp__workflowy__workflowy_complete`
+   - Optionally update the status node to show progress
+
+7. When ALL children are done, update the parent's status node:
+```
+Use mcp__workflowy__workflowy_update:
+- id: <status-node-id>
+- name: "<b>completed these in parallel:</b> <brief summary>"
+```
+
+8. Then mark the parent task complete
+
+**Example parallel task structure:**
+```
+[todo] Implement these features in parallel:
+├── [todo] Add user authentication
+├── [todo] Create database schema
+├── [todo] Set up API routes
+└── <b>started working on these in parallel</b>
+```
+
+**Note:** If any parallel child task has questions or gets blocked, handle it normally — the other parallel tasks continue independently. Only mark the parent complete when all children are done (completed or explicitly skipped/blocked).
+
 ### 5. When Starting a Task
 
 Before beginning work on a task:
@@ -276,6 +344,11 @@ Root Node (provided ID)
 │       ├── PostgreSQL (recommended for relational data)
 │       ├── MongoDB (if we need flexible schemas)
 │       └── Let's use SQLite for now, we can migrate later
+├── [todo] Set up the API layer — do these in parallel:
+│   ├── [todo] Create REST endpoints
+│   ├── [todo] Add input validation
+│   ├── [todo] Set up error handling
+│   └── **started working on these in parallel**
 └── [todo] Update README
 ```
 
@@ -283,6 +356,7 @@ In this example:
 - "Add user authentication" is in progress (bold status node)
 - "Fix the login bug" had a question with options - user selected `/api/login` by adding "this one" under it
 - "Choose database" has an unanswered question with options, plus a custom answer from the user
+- "Set up the API layer" triggered parallel execution (note "in parallel" in the text) — all three child tasks are being worked on simultaneously by background subagents
 - "Update README" is pending
 
 ## Important Notes
@@ -292,3 +366,5 @@ In this example:
 - Keep status updates concise but informative
 - The user may add tasks at any level - always refetch to see the full picture
 - If the Workflowy MCP tools fail, inform the user and retry after a delay
+- When a parent task indicates parallel execution, launch all children as background subagents in a single message — this is critical for true parallelism
+- Use "started working on these in parallel" (plural) for parallel tasks, "started working on this" (singular) for sequential tasks
